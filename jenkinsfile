@@ -1,0 +1,43 @@
+pipeline {
+    agent any
+    environment {
+        SONAR_TOKEN = credentials('sonar-token')
+    }
+    stages {
+        stage('Build') {
+            steps {
+                sh './gradlew clean build'
+            }
+        }
+        stage('Test') {
+            steps {
+                sh './gradlew testDebugUnitTest jacocoTestReport'
+            }
+        }
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('MySonarQube') {
+                    sh './gradlew sonarqube -Dsonar.login=$SONAR_TOKEN'
+                }
+            }
+        }
+    }
+    post {
+        always {
+            junit 'app/build/test-results/testDebugUnitTest/*.xml'
+            jacoco execPattern: 'app/build/jacoco/testDebugUnitTest.exec', classPattern: 'app/build/intermediates/javac/debug', sourcePattern: 'app/src/main/java', exclusionPattern: '**/R.class'
+        }
+        success {
+            script {
+                currentBuild.description = "All checks passed"
+                githubNotify context: 'Jenkins', status: 'SUCCESS', description: 'Build succeeded'
+            }
+        }
+        failure {
+            script {
+                currentBuild.description = "Some checks failed"
+                githubNotify context: 'Jenkins', status: 'FAILURE', description: 'Build failed'
+            }
+        }
+    }
+}
